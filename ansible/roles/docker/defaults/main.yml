@@ -1,0 +1,28 @@
+---
+docker_apt_distribution: >-
+  {{ {'Debian': 'debian',
+      'Ubuntu': 'ubuntu',
+      'Pop!_OS': 'ubuntu',
+      'Linux Mint': 'ubuntu'}.get(ansible_facts['distribution'], ansible_facts['distribution'] | lower) }}
+docker_apt_suite: "{{ ansible_facts['distribution_release'] }}"
+docker_apt_repo_url: "https://download.docker.com/linux/{{ docker_apt_distribution }}"
+docker_apt_gpg_url: "https://download.docker.com/linux/{{ docker_apt_distribution }}/gpg"
+docker_apt_keyring_path: /etc/apt/keyrings/docker.asc
+docker_apt_components:
+  - stable
+docker_apt_architecture: >-
+  {{ {'x86_64': 'amd64', 'aarch64': 'arm64', 'armv7l': 'armhf'}.get(ansible_facts['architecture'], 'amd64') }}
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Via apt, não pip: o Debian 13 aplica a PEP 668 e recusa a instalação.
+docker_sdk_package: python3-docker
+
+docker_service_name: docker
+docker_service_enabled: true
+docker_service_state: started

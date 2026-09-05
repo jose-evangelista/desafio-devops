@@ -1,0 +1,15 @@
+---
+korp_deploy_dir: /opt/korp
+korp_network_name: korp-net
+
+korp_app_image: korp/http-server-projeto-korp
+korp_app_version: "0.1.0"
+
+korp_nginx_image: "nginx:1.30.4-alpine"
+korp_prometheus_image: "prom/prometheus:v3.14.0"
+korp_grafana_image: "grafana/grafana:13.2.1"
+korp_blackbox_image: "prom/blackbox-exporter:v0.28.0"
+
+korp_nginx_host_port: 80
+korp_prometheus_host_port: 9090
+korp_grafana_host_port: 3000
