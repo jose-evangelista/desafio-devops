@@ -50,8 +50,8 @@
     state: present
   register: docker_apt_repository
 
-# Atualizar o cache só quando o repositório muda mantém a segunda execução em
-# changed=0 sem quebrar a primeira, que ainda não conhece o docker-ce.
+# Refreshing the cache only when the repository changed keeps the second run at
+# changed=0 without breaking the first one, which does not know docker-ce yet.
 - name: Install Docker Engine, CLI and plugins
   ansible.builtin.apt:
     name: "{{ docker_packages }}"

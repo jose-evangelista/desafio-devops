@@ -1,0 +1,50 @@
+name: korp
+
+services:
+  http-server-projeto-korp:
+    build:
+      context: ../app
+      args:
+        VERSION: ${KORP_APP_VERSION}
+        COMMIT: ${KORP_APP_COMMIT}
+    image: ${KORP_APP_IMAGE}:${KORP_APP_VERSION}
+    container_name: http-server-projeto-korp
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - korp-net
+    healthcheck:
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  nginx:
+    image: ${KORP_NGINX_IMAGE}
+    container_name: nginx
+    restart: unless-stopped
+    depends_on:
+      http-server-projeto-korp:
+        condition: service_healthy
+    ports:
+      - "${KORP_NGINX_HOST_PORT}:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - korp-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+networks:
+  korp-net:
+    external: true
+    name: ${KORP_NETWORK_NAME}

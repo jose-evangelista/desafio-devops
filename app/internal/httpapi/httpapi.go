@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,10 @@ const (
 	RouteProjetoKorp = "/projeto-korp"
 	RouteHealthz     = "/healthz"
 	RouteReadyz      = "/readyz"
+
+	// Label for every unmatched path. A constant keeps the request URL out of
+	// the metric, which would otherwise be unbounded cardinality.
+	routeOther = "other"
 
 	serviceLabel = "Projeto Korp"
 	contentType  = "application/json; charset=utf-8"
@@ -38,6 +43,9 @@ func NewMux(log *slog.Logger, instrument Instrumenter) *http.ServeMux {
 	mux.Handle("GET "+RouteHealthz, ok())
 	mux.Handle("GET "+RouteReadyz, ok())
 
+	mux.Handle(RouteProjetoKorp, instrument(RouteProjetoKorp)(methodNotAllowed(http.MethodGet)))
+	mux.Handle("/", instrument(routeOther)(notFound()))
+
 	return mux
 }
 
@@ -52,6 +60,21 @@ func projetoKorp(log *slog.Logger) http.Handler {
 		if err := json.NewEncoder(w).Encode(body); err != nil {
 			log.ErrorContext(r.Context(), "failed to encode response", slog.Any("error", err))
 		}
+	})
+}
+
+func methodNotAllowed(allowed ...string) http.Handler {
+	allow := strings.Join(allowed, ", ")
+
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Allow", allow)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
+}
+
+func notFound() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
 	})
 }
 

@@ -20,7 +20,7 @@ docker_packages:
   - docker-buildx-plugin
   - docker-compose-plugin
 
-# Via apt, não pip: o Debian 13 aplica a PEP 668 e recusa a instalação.
+# Via apt, not pip: Debian 13 enforces PEP 668 and refuses the installation.
 docker_sdk_package: python3-docker
 
 docker_service_name: docker

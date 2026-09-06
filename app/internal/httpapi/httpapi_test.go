@@ -32,6 +32,7 @@ func TestRoutes(t *testing.T) {
 		{"wrong method", http.MethodPost, RouteProjetoKorp, http.StatusMethodNotAllowed, ""},
 		{"unknown path", http.MethodGet, "/nao-existe", http.StatusNotFound, ""},
 		{"metrics is not public", http.MethodGet, "/metrics", http.StatusNotFound, ""},
+		{"root", http.MethodGet, "/", http.StatusNotFound, ""},
 	}
 
 	mux := testMux()
@@ -50,6 +51,36 @@ func TestRoutes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMethodNotAllowedAdvertisesGet(t *testing.T) {
+	rec := httptest.NewRecorder()
+	testMux().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, RouteProjetoKorp, nil))
+
+	if got := rec.Header().Get("Allow"); got != http.MethodGet {
+		t.Errorf("Allow = %q, want %q", got, http.MethodGet)
+	}
+}
+
+func TestUnmatchedPathsAreInstrumentedUnderOneLabel(t *testing.T) {
+	var seen []string
+	spy := func(route string) Middleware {
+		seen = append(seen, route)
+		return func(next http.Handler) http.Handler { return next }
+	}
+
+	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	NewMux(log, spy)
+
+	var others int
+	for _, route := range seen {
+		if route == routeOther {
+			others++
+		}
+	}
+	if others != 1 {
+		t.Errorf("routeOther registered %d times, want 1: %v", others, seen)
 	}
 }
 
