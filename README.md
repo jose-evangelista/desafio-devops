@@ -13,9 +13,9 @@ Ansible.
 | Fase | Escopo | Situação |
 |------|--------|----------|
 | 0 | Esqueleto do repositório e role `docker` do Ansible | concluída |
-| 1 | Serviço Go, métricas e testes | pendente |
-| 2 | Container da aplicação, compose e proxy NGINX | pendente |
-| 3 | Prometheus, blackbox exporter e Grafana provisionado | pendente |
+| 1 | Serviço Go, métricas e testes | concluída |
+| 2 | Container da aplicação, compose e proxy NGINX | concluída |
+| 3 | Prometheus, blackbox exporter e Grafana provisionado | concluída |
 | 4 | Roles `app`, `proxy` e `monitoring` | pendente |
 | 5 | Documentação | pendente |
 
@@ -33,18 +33,18 @@ Ubuntu trocando o bloco ativo em `ansible/inventory/hosts.ini`.
 
 ```bash
 pipx install ansible-core                              # 2.21.3
-ansible-galaxy collection install -r ansible/requirements.yml
+ansible-galaxy collection install -r ansible/requirements.yaml
 ```
 
 ## Execução
 
 ```bash
 cd ansible
-ansible-playbook site.yml
+ansible-playbook site.yaml
 ```
 
 Para provisionar apenas o Docker:
 
 ```bash
-ansible-playbook site.yml --tags docker
+ansible-playbook site.yaml --tags docker
 ```

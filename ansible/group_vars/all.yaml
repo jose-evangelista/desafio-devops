@@ -1,9 +1,16 @@
 ---
-korp_deploy_dir: /opt/korp
+korp_root_dir: /opt/korp
+korp_app_dir: "{{ korp_root_dir }}/app"
+korp_compose_dir: "{{ korp_root_dir }}/deploy"
+
+korp_app_src: "{{ playbook_dir }}/../app"
+korp_deploy_src: "{{ playbook_dir }}/../deploy"
+
 korp_network_name: korp-net
 
 korp_app_image: korp/http-server-projeto-korp
 korp_app_version: "0.1.0"
+korp_app_commit: none
 
 korp_nginx_image: "nginx:1.30.4-alpine"
 korp_prometheus_image: "prom/prometheus:v3.14.0"
@@ -12,4 +19,7 @@ korp_blackbox_image: "prom/blackbox-exporter:v0.28.0"
 
 korp_nginx_host_port: 80
 korp_prometheus_host_port: 9090
+korp_prometheus_retention: 15d
 korp_grafana_host_port: 3000
+korp_grafana_admin_user: admin
+korp_grafana_admin_password: admin

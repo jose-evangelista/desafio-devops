@@ -6,3 +6,73 @@
   roles:
     - role: docker
       tags: [docker]
+    - role: app
+      tags: [app]
+    - role: proxy
+      tags: [proxy]
+    - role: monitoring
+      tags: [monitoring]
+
+  # Bringing the stack up spans every service, so it belongs to no single role.
+  # It runs here, after each role has placed the files its containers mount.
+  post_tasks:
+    - name: Ensure the compose directory exists
+      ansible.builtin.file:
+        path: "{{ korp_compose_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [stack]
+
+    - name: Install the compose file
+      ansible.builtin.copy:
+        src: "{{ korp_deploy_src }}/compose.yaml"
+        dest: "{{ korp_compose_dir }}/compose.yaml"
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [stack]
+
+    - name: Render the environment file
+      ansible.builtin.template:
+        src: templates/env.j2
+        dest: "{{ korp_compose_dir }}/.env"
+        owner: root
+        group: root
+        mode: "0600"
+      tags: [stack]
+
+    - name: Bring the stack up
+      community.docker.docker_compose_v2:
+        project_src: "{{ korp_compose_dir }}"
+        state: present
+        build: never
+      tags: [stack]
+
+    - name: Wait for the service to answer through the proxy
+      ansible.builtin.uri:
+        url: "http://localhost:{{ korp_nginx_host_port }}/projeto-korp"
+        return_content: true
+      register: korp_response
+      retries: 30
+      delay: 2
+      until: korp_response.status | default(0) == 200
+      tags: [stack, validate]
+
+    - name: Assert the response contract
+      ansible.builtin.assert:
+        that:
+          - korp_response.json.nome == "Projeto Korp"
+          - korp_response.json.horario is defined
+          - korp_response.json | length == 2
+        fail_msg: "Unexpected payload: {{ korp_response.content | default('') }}"
+        success_msg: "Response matches the contract."
+      tags: [stack, validate]
+
+    - name: Show the service response
+      ansible.builtin.debug:
+        msg:
+          endpoint: "http://localhost:{{ korp_nginx_host_port }}/projeto-korp"
+          resposta: "{{ korp_response.json }}"
+      tags: [stack, validate]

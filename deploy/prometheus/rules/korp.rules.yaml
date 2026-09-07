@@ -1,0 +1,42 @@
+groups:
+  - name: korp-sli
+    interval: 15s
+    rules:
+      - record: job:http_requests:success_ratio5m
+        expr: |
+          sum by (job) (rate(http_requests_total{code!~"5.."}[5m]))
+          /
+          sum by (job) (rate(http_requests_total[5m]))
+
+  - name: korp-alerts
+    rules:
+      - alert: ServiceDown
+        expr: up{job="http-server-projeto-korp"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "O serviço não responde ao scrape"
+          description: "O Prometheus não consegue coletar {{ $labels.instance }} há mais de 1 minuto. O processo caiu ou a rede quebrou."
+
+      - alert: ProbeFailing
+        expr: probe_success == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "O caminho ponta a ponta está quebrado"
+          description: "A sonda em {{ $labels.instance }} falha há mais de 1 minuto. Como ela passa pelo NGINX, a causa pode estar no proxy e não na aplicação."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taxa de erro acima do orçamento do SLO"
+          description: "Mais de 1% das requisições retornam 5xx há 5 minutos, contra um alvo de 99,9% de sucesso. A aplicação responde, mas responde errado."
