@@ -1,0 +1,16 @@
+---
+# Validating before reloading means a broken config fails the play instead of
+# taking the proxy down. Reloading beats recreating the container: no dropped
+# connections.
+- name: Validate the NGINX configuration
+  ansible.builtin.command:
+    cmd: docker exec nginx nginx -t
+  changed_when: false
+  when: korp_nginx_container.exists and korp_nginx_container.container.State.Running
+  listen: Reload nginx
+
+- name: Reload NGINX
+  ansible.builtin.command:
+    cmd: docker exec nginx nginx -s reload
+  when: korp_nginx_container.exists and korp_nginx_container.container.State.Running
+  listen: Reload nginx

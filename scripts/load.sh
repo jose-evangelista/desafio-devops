@@ -4,7 +4,7 @@
 # an empty dashboard looks like a broken one.
 #
 #   ./load.sh
-#   URL=http://10.165.57.71 DURATION=120 INTERVAL=0.1 NOISE=10 ./load.sh
+#   URL=http://10.0.0.10 DURATION=120 INTERVAL=0.1 NOISE=10 ./load.sh
 #
 set -euo pipefail
 

@@ -1,0 +1,10 @@
+---
+# --web.enable-lifecycle is set in the compose file, which is what makes this
+# endpoint available. Reloading avoids restarting the container and losing the
+# scrape in flight.
+- name: Reload prometheus
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ korp_prometheus_host_port }}/-/reload"
+    method: POST
+    status_code: 200
+  when: korp_prometheus_container.exists and korp_prometheus_container.container.State.Running
