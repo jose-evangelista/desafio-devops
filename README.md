@@ -1,50 +1,170 @@
-# Projeto Korp — desafio DevOps
+# Projeto Korp
 
-Serviço HTTP em Go atrás de um proxy reverso NGINX, em containers, com
-monitoramento via Prometheus e Grafana, provisionado por um único comando
-Ansible.
+Serviço HTTP em Go atrás de um proxy reverso NGINX, em containers, com Prometheus e
+Grafana. O ambiente inteiro sobe com um comando Ansible.
 
-> Documentação em construção. O README completo — topologia, execução passo a
-> passo e as decisões técnicas — é escrito na Fase 5. As decisões detalhadas
-> ficam em `DECISOES.md`.
+```
+$ curl http://localhost:80/projeto-korp
+{"nome":"Projeto Korp","horario":"2026-09-07T00:33:18Z"}
+```
 
-## Estado atual
+As decisões técnicas estão em **[DECISOES.md](DECISOES.md)**.
 
-| Fase | Escopo | Situação |
-|------|--------|----------|
-| 0 | Esqueleto do repositório e role `docker` do Ansible | concluída |
-| 1 | Serviço Go, métricas e testes | concluída |
-| 2 | Container da aplicação, compose e proxy NGINX | concluída |
-| 3 | Prometheus, blackbox exporter e Grafana provisionado | concluída |
-| 4 | Roles `app`, `proxy` e `monitoring` | pendente |
-| 5 | Documentação | pendente |
+## Topologia
 
-## Ambiente de demonstração
+```
+         host :80        host :9090      host :3000
+             |                |               |
+ ============|================|===============|=============  VM
+             v                v               v
+        +---------+      +------------+  +---------+
+   +--->|  nginx  |      | prometheus |<-| grafana |
+   |    +----+----+      +--+------+--+  +---------+
+   |         | :8080        |      |
+   |         v              |      | coleta :9115
+   |  +--------------+      |      v
+   |  | http-server- |<-----+  +----------+
+   |  | projeto-korp |coleta   | blackbox |
+   |  | :8080  :9101 | :9101   +----+-----+
+   |  +--------------+              |
+   |                                | sonda GET /projeto-korp
+   +--------------------------------+
+ ============================================================
 
-Uma VM Incus chamada `lab`, rodando Debian 13 (trixie). O Ansible executa a
-partir da estação de trabalho e conecta na VM pelo plugin de conexão
-`community.general.incus`, entrando direto como root.
+ rede korp-net     http-server-projeto-korp . nginx . blackbox . prometheus
+ rede monitoring   prometheus . grafana . blackbox
+```
 
-O inventário traz um bloco `[korp]` comentado com conexão SSH: nada nas roles
-depende do Incus, então o mesmo playbook roda contra qualquer host Debian ou
-Ubuntu trocando o bloco ativo em `ansible/inventory/hosts.ini`.
+A aplicação não publica porta no host — só o NGINX fala com ela. O `/metrics` fica numa
+porta administrativa separada (9101), que não é publicada nem alcançável pelo proxy. O
+Grafana está apenas na rede `monitoring`, então enxerga o Prometheus e mais nada.
 
-## Pré-requisitos na estação de trabalho
+## Ambiente
+
+Demonstrado numa VM Incus chamada `lab` com Debian 13. O Ansible roda da estação de
+trabalho e conecta pelo plugin `community.general.incus`, entrando como root.
+
+Nada nas roles depende do Incus: o inventário traz um bloco `[korp]` comentado com
+conexão SSH para rodar contra qualquer host Debian ou Ubuntu.
+
+## Como executar
+
+O Ansible precisa estar instalado na estação de trabalho — veja o
+[guia de instalação oficial](https://docs.ansible.com/projects/ansible/latest/installation_guide/intro_installation.html).
+Com ele disponível, instale as collections que o projeto usa:
 
 ```bash
-pipx install ansible-core                              # 2.21.3
 ansible-galaxy collection install -r ansible/requirements.yaml
 ```
 
-## Execução
+**1. Aponte o inventário.** O `ansible/inventory/hosts.ini` vem apontado para a VM do
+laboratório. Para outro alvo, comente o bloco `[incus]` e descomente o `[korp]`:
+
+```ini
+[korp]
+korp-01 ansible_host=10.0.0.10
+
+[korp:vars]
+ansible_user=root
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+```
+
+O playbook usa `hosts: all`, então nenhuma role muda.
+
+**2. Suba o ambiente.**
 
 ```bash
 cd ansible
+ansible -m ping all
 ansible-playbook site.yaml
 ```
 
-Para provisionar apenas o Docker:
+O playbook instala o Docker, cria a rede, constrói a imagem, sobe os cinco containers,
+configura proxy e monitoramento, e valida o serviço exibindo a resposta:
+
+```
+TASK [Show the service response] ***********************************************
+ok: [lab] =>
+    msg:
+        endpoint: http://localhost:80/projeto-korp
+        resposta:
+            horario: '2026-09-07T00:33:18Z'
+            nome: Projeto Korp
+```
+
+A segunda execução dá `changed=0`.
+
+Cada camada roda isolada por tag: `docker`, `app`, `proxy`, `monitoring`, `stack`,
+`validate`.
+
+## Acesso
+
+| Componente | Endereço | Credenciais |
+|---|---|---|
+| Aplicação | `http://<host>/projeto-korp` | — |
+| Prometheus | `http://<host>:9090` | — |
+| Grafana | `http://<host>:3000` | `admin` / `admin` |
+
+O Grafana abre com o datasource e o dashboard já provisionados, na pasta
+**Projeto Korp**. Prometheus e Grafana são publicados em `0.0.0.0` porque a VM é o
+limite de isolamento do laboratório.
+
+Sem tráfego o dashboard aparece vazio. Para popular, da raiz do repositório:
 
 ```bash
-ansible-playbook site.yaml --tags docker
+URL=http://<host> DURATION=600 NOISE=10 ./scripts/load.sh
 ```
+
+`NOISE` é a porcentagem de requisições enviadas a paths inexistentes, para o painel de
+códigos de status ter o que mostrar.
+
+## Disponibilidade
+
+O enunciado deixou a definição em aberto. Uso três camadas, porque cada uma enxerga uma
+falha que as outras não enxergam:
+
+| Métrica | Responde | Não vê |
+|---|---|---|
+| `up{job="http-server-projeto-korp"}` | o processo responde à coleta? | se a resposta está correta |
+| `job:http_requests:success_ratio5m` | as requisições dão certo? | o caminho até a aplicação |
+| `probe_success` | o usuário consegue usar? | — |
+
+As duas primeiras enxergam o serviço a partir da coleta; a terceira é uma requisição real
+feita de fora pelo blackbox exporter, atravessando o NGINX. Existe falha em que a primeira reporta
+tudo certo e a terceira reporta quebrado, e ambas estão corretas — o
+[DECISOES.md](DECISOES.md) traz o caso reproduzido.
+
+## Dashboard
+
+Organizado por RED — *rate*, *errors*, *duration* — com disponibilidade e error budget
+no topo. SLO alvo de 99,9%.
+
+Os alertas `ServiceDown`, `ProbeFailing` e `HighErrorRate` ficam em
+`http://<host>:9090/alerts`. Não há Alertmanager, então eles são visíveis mas não
+notificam.
+
+## Estrutura
+
+```
+app/          serviço em Go, Dockerfile e testes
+deploy/       compose.yaml e as configurações que os containers montam
+ansible/      inventário, group_vars, site.yaml e as roles docker/app/proxy/monitoring
+scripts/      gerador de carga
+```
+
+Os arquivos de `deploy/` são estáticos e o Ansible apenas os copia; só o `.env` é
+template, a partir de `ansible/group_vars/all.yaml`.
+
+## Versões
+
+Verificadas nas fontes oficiais em 04/09/2026.
+
+| Componente | Versão |
+|---|---|
+| Go | 1.27.1 |
+| NGINX | 1.30.4-alpine |
+| Prometheus | v3.14.0 |
+| Grafana | 13.2.1 |
+| Blackbox exporter | v0.28.0 |
+| client_golang | v1.24.1 |
+| Runtime da aplicação | `distroless/static-debian13:nonroot`, fixado por digest |
