@@ -102,6 +102,9 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # Grafana spawns one process per bundled datasource. Only Prometheus is
+      # used here, and disabling the rest halves the container memory.
+      GF_PLUGINS_DISABLE_PLUGINS: "elasticsearch,grafana-postgresql-datasource,grafana-pyroscope-datasource,influxdb,jaeger,loki,mssql,mysql,opentsdb,stackdriver,tempo,zipkin"
     ports:
       - "${KORP_GRAFANA_HOST_PORT}:3000"
     volumes:
