@@ -1,0 +1,16 @@
+.env
+
+/app/bin/
+*.test
+*.out
+
+*.retry
+ansible/collections/
+ansible/*.log
+
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+

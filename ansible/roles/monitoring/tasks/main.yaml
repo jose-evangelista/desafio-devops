@@ -1,0 +1,48 @@
+---
+- name: Ensure the monitoring configuration directories exist
+  ansible.builtin.file:
+    path: "{{ korp_compose_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - prometheus/rules
+    - blackbox
+    - grafana/provisioning/datasources
+    - grafana/provisioning/dashboards
+    - grafana/dashboards
+
+- name: Look up the Prometheus container
+  community.docker.docker_container_info:
+    name: prometheus
+  register: korp_prometheus_container
+
+- name: Install the Prometheus configuration and rules
+  ansible.builtin.copy:
+    src: "{{ korp_deploy_src }}/prometheus/"
+    dest: "{{ korp_compose_dir }}/prometheus/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  notify: Reload prometheus
+
+- name: Install the blackbox exporter configuration
+  ansible.builtin.copy:
+    src: "{{ korp_deploy_src }}/blackbox/"
+    dest: "{{ korp_compose_dir }}/blackbox/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+
+# Grafana rereads provisioning on its own schedule, so no handler is needed here.
+- name: Install the Grafana provisioning and dashboards
+  ansible.builtin.copy:
+    src: "{{ korp_deploy_src }}/grafana/"
+    dest: "{{ korp_compose_dir }}/grafana/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"

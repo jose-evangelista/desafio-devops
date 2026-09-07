@@ -1,0 +1,24 @@
+---
+- name: Ensure the NGINX configuration directory exists
+  ansible.builtin.file:
+    path: "{{ korp_compose_dir }}/nginx/conf.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# The handler needs to know whether there is a container to reload: on the first
+# run the config lands before the stack exists.
+- name: Look up the NGINX container
+  community.docker.docker_container_info:
+    name: nginx
+  register: korp_nginx_container
+
+- name: Install the reverse proxy configuration
+  ansible.builtin.copy:
+    src: "{{ korp_deploy_src }}/nginx/conf.d/http-server-projeto-korp.conf"
+    dest: "{{ korp_compose_dir }}/nginx/conf.d/http-server-projeto-korp.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx

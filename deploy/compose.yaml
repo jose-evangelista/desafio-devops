@@ -1,0 +1,132 @@
+name: korp
+
+services:
+  http-server-projeto-korp:
+    build:
+      context: ../app
+      args:
+        VERSION: ${KORP_APP_VERSION}
+        COMMIT: ${KORP_APP_COMMIT}
+    image: ${KORP_APP_IMAGE}:${KORP_APP_VERSION}
+    container_name: http-server-projeto-korp
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - korp-net
+    healthcheck:
+      test: ["CMD", "/app", "-healthcheck"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  nginx:
+    image: ${KORP_NGINX_IMAGE}
+    container_name: nginx
+    restart: unless-stopped
+    depends_on:
+      http-server-projeto-korp:
+        condition: service_healthy
+    ports:
+      - "${KORP_NGINX_HOST_PORT}:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - korp-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  blackbox:
+    image: ${KORP_BLACKBOX_IMAGE}
+    container_name: blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox/blackbox.yaml
+    volumes:
+      - ./blackbox:/etc/blackbox:ro
+    networks:
+      - korp-net
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9115/-/healthy"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  prometheus:
+    image: ${KORP_PROMETHEUS_IMAGE}
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${KORP_PROMETHEUS_RETENTION}
+      - --web.enable-lifecycle
+    depends_on:
+      blackbox:
+        condition: service_healthy
+    ports:
+      - "${KORP_PROMETHEUS_HOST_PORT}:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks:
+      - korp-net
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  grafana:
+    image: ${KORP_GRAFANA_IMAGE}
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${KORP_GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${KORP_GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # Grafana spawns one process per bundled datasource. Only Prometheus is
+      # used here, and disabling the rest halves the container memory.
+      GF_PLUGINS_DISABLE_PLUGINS: "elasticsearch,grafana-postgresql-datasource,grafana-pyroscope-datasource,influxdb,jaeger,loki,mssql,mysql,opentsdb,stackdriver,tempo,zipkin"
+    ports:
+      - "${KORP_GRAFANA_HOST_PORT}:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+
+networks:
+  korp-net:
+    external: true
+    name: ${KORP_NETWORK_NAME}
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
